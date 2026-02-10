@@ -8,7 +8,7 @@ jax-op-diff 是一个以 JAX 为核心的底层算子差异对比工具：在不
 ## Key Features
 - 以 JAX 为主，对比同一算子在 JAX 与 PyTorch 的输出差异。
 - 覆盖多精度（如 `float32`、`bfloat16`、`float8_*`）与多输入形状。
-- 支持 dump 与 replay：复用同一输入进行确定性重放对比。
+- 支持单文件 `dump.h5` + replay：复用同一输入进行确定性重放对比。
 - 自动生成 `CSV` 和 `Markdown` 报告。
 
 ## Quick Start
@@ -27,3 +27,8 @@ jax-op-diff --jax-backend cpu --torch-device cpu
 # 回放模式：使用已有 dump 做确定性复测
 jax-op-diff --from-dumps output/dumps --jax-backend gpu --report-dir output/replay_reports
 ```
+
+默认输出文件：
+- `output/dumps/dump.h5`
+- `output/reports/precision_report.csv`
+- `output/reports/precision_report.md`

@@ -8,7 +8,7 @@ jax-op-diff is a JAX-first low-level operator diff tool: it compares JAX vs PyTo
 ## Key Features
 - JAX-first operator output comparison against PyTorch.
 - Precision and shape sweeps (`float32`, `bfloat16`, `float8_*`, etc.).
-- Dump + replay workflow for deterministic re-checks.
+- Single-file `dump.h5` + replay workflow for deterministic re-checks.
 - Automatic `CSV` and `Markdown` report generation.
 
 ## Quick Start
@@ -27,3 +27,8 @@ jax-op-diff --jax-backend cpu --torch-device cpu
 # Replay mode: deterministic verification from existing dumps
 jax-op-diff --from-dumps output/dumps --jax-backend gpu --report-dir output/replay_reports
 ```
+
+Default dump artifacts:
+- `output/dumps/dump.h5`
+- `output/reports/precision_report.csv`
+- `output/reports/precision_report.md`

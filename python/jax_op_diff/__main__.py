@@ -31,7 +31,7 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
         "--from-dumps", default=None, metavar="DIR",
-        help="Replay mode: load inputs from existing .npz dump files and "
+        help="Replay mode: load inputs from dump.h5 and "
              "compare stored outputs against fresh JAX results on --jax-backend",
     )
     args = parser.parse_args()
@@ -117,7 +117,7 @@ def main():
     print(f"CSV report:      {csv_path}")
     print(f"Markdown report: {md_path}")
     if not replay_mode and not args.no_dump:
-        print(f"Data dumps:      {config.dump_dir}/")
+        print(f"Data dump file:  {config.dump_dir}/dump.h5")
 
 
 if __name__ == "__main__":

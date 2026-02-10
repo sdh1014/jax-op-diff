@@ -12,6 +12,7 @@ dependencies = [
     "torch",
     "numpy",
     "ml_dtypes",
+    "h5py",
 ]
 
 [project.scripts]
