@@ -3,7 +3,7 @@
 import dataclasses
 import hashlib
 from enum import Enum
-from typing import Callable, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
 import numpy as np
 
@@ -36,6 +36,12 @@ class InputDomain(Enum):
 
 
 @dataclasses.dataclass
+class AtenSpec:
+    name: str
+    overload: str = "default"
+
+
+@dataclasses.dataclass
 class OpSpec:
     name: str
     category: str
@@ -46,15 +52,94 @@ class OpSpec:
     shape_type: str = "elementwise"  # elementwise / reduction / matmul / batch_matmul / conv / fft
     supported_dtypes: Optional[Tuple[str, ...]] = None  # None = all default dtypes
     notes: str = ""
+    torch_aten: Optional[AtenSpec] = None
+    torch_input_keys: Optional[Tuple[str, ...]] = None
+    torch_aten_builder: Optional[Callable[[dict], tuple[tuple, dict]]] = None
+    torch_fn_builder: Optional[Callable[[dict], tuple[tuple, dict]]] = None
+    torch_output_adapter: Optional[Callable[[Any, dict], Any]] = None
 
 
 _REGISTRY: List[OpSpec] = []
 
 
+def _default_torch_input_keys(arity: OpArity) -> Tuple[str, ...]:
+    if arity in (OpArity.UNARY, OpArity.FFT, OpArity.TYPE_CAST, OpArity.REDUCTION):
+        return ("x",)
+    if arity in (OpArity.BINARY, OpArity.MATMUL):
+        return ("x", "y")
+    if arity == OpArity.TERNARY:
+        return ("lo", "x", "hi")
+    if arity == OpArity.CONV:
+        return ("input", "kernel")
+    return ()
+
+
+def _default_torch_builder(arity: OpArity, input_keys: Tuple[str, ...]) -> Callable[[dict], tuple[tuple, dict]]:
+    if arity == OpArity.REDUCTION:
+        def build(call_inputs: dict) -> tuple[tuple, dict]:
+            x = call_inputs["x"]
+            axis = x.ndim - 1 if x.ndim > 0 else 0
+            return (x, axis), {}
+
+        return build
+
+    def build(call_inputs: dict) -> tuple[tuple, dict]:
+        return tuple(call_inputs[key] for key in input_keys), {}
+
+    return build
+
+
+def _identity_output(x: Any, _call_inputs: dict) -> Any:
+    return x
+
+
 def register(spec: OpSpec) -> OpSpec:
+    if spec.torch_input_keys is None:
+        spec.torch_input_keys = _default_torch_input_keys(spec.arity)
+    if spec.torch_aten_builder is None:
+        spec.torch_aten_builder = _default_torch_builder(spec.arity, spec.torch_input_keys)
+    if spec.torch_fn_builder is None:
+        spec.torch_fn_builder = _default_torch_builder(spec.arity, spec.torch_input_keys)
+    if spec.torch_output_adapter is None:
+        spec.torch_output_adapter = _identity_output
+
     _REGISTRY.append(spec)
     return spec
 
+
+
+
+def op_spec(name: str, category: str, arity: OpArity, *,
+            torch_fn: Optional[Callable],
+            input_domain: InputDomain = InputDomain.REAL,
+            shape_type: str = "elementwise",
+            supported_dtypes: Optional[Tuple[str, ...]] = None,
+            notes: str = "",
+            torch_aten: Optional[AtenSpec] = None,
+            torch_input_keys: Optional[Tuple[str, ...]] = None,
+            torch_aten_builder: Optional[Callable[[dict], tuple[tuple, dict]]] = None,
+            torch_fn_builder: Optional[Callable[[dict], tuple[tuple, dict]]] = None,
+            torch_output_adapter: Optional[Callable[[Any, dict], Any]] = None):
+    """Decorator: register function as OpSpec jax_fn."""
+    def decorator(jax_fn: Callable) -> OpSpec:
+        return register(OpSpec(
+            name=name,
+            category=category,
+            arity=arity,
+            jax_fn=jax_fn,
+            torch_fn=torch_fn,
+            input_domain=input_domain,
+            shape_type=shape_type,
+            supported_dtypes=supported_dtypes,
+            notes=notes,
+            torch_aten=torch_aten,
+            torch_input_keys=torch_input_keys,
+            torch_aten_builder=torch_aten_builder,
+            torch_fn_builder=torch_fn_builder,
+            torch_output_adapter=torch_output_adapter,
+        ))
+
+    return decorator
 
 def get_all_ops() -> List[OpSpec]:
     return list(_REGISTRY)

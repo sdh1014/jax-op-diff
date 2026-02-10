@@ -268,7 +268,7 @@ def execute_single_test(op: OpSpec, shape, dtype_key: str,
         return _skip_result(error_msg=fp8_skip)
 
     # Check torch availability
-    if op.torch_fn is None:
+    if op.torch_fn is None and op.torch_aten is None:
         return _skip_result(
             torch_missing=True,
             notes=f"MISSING: no PyTorch equivalent. {op.notes}")
@@ -389,46 +389,56 @@ def _execute_jax(op: OpSpec, inputs: dict, dtype_key: str, device, is_complex: b
         raise ValueError(f"Unsupported arity: {op.arity}")
 
 
+def _resolve_torch_callable(op: OpSpec):
+    """Resolve callable: ATen first, then torch_fn fallback."""
+    if op.torch_aten is not None:
+        try:
+            packet = getattr(torch.ops.aten, op.torch_aten.name)
+            return getattr(packet, op.torch_aten.overload), True
+        except AttributeError:
+            pass
+
+    if op.torch_fn is not None:
+        return op.torch_fn, False
+
+    raise ValueError(f"No torch mapping for op: {op.name}")
+
+
+def _prepare_torch_inputs(inputs: dict, dtype_key: str, device: str,
+                          is_complex: bool = False) -> dict:
+    """Convert numeric inputs to torch tensors; keep metadata fields unchanged."""
+    prepared = {}
+    for key, value in inputs.items():
+        if isinstance(value, (str, bytes)):
+            prepared[key] = value
+            continue
+
+        if isinstance(value, np.ndarray) or np.isscalar(value):
+            arr = np.asarray(value)
+            if is_complex or np.iscomplexobj(arr):
+                prepared[key] = _numpy_to_torch_complex(arr, device)
+            else:
+                prepared[key] = _numpy_to_torch(arr, dtype_key, device)
+        else:
+            prepared[key] = value
+    return prepared
+
+
 def _execute_torch(op: OpSpec, inputs: dict, dtype_key: str, device: str,
-                    is_complex: bool = False):
-    """Run the PyTorch function with given inputs."""
-    if op.arity == OpArity.UNARY:
-        if is_complex:
-            x = _numpy_to_torch_complex(inputs["x"], device)
-        else:
-            x = _numpy_to_torch(inputs["x"], dtype_key, device)
-        return op.torch_fn(x)
-    elif op.arity == OpArity.BINARY:
-        if is_complex:
-            x = _numpy_to_torch_complex(inputs["x"], device)
-            y = _numpy_to_torch_complex(inputs["y"], device)
-        else:
-            x = _numpy_to_torch(inputs["x"], dtype_key, device)
-            y = _numpy_to_torch(inputs["y"], dtype_key, device)
-        return op.torch_fn(x, y)
-    elif op.arity == OpArity.TERNARY:
-        lo = _numpy_to_torch(inputs["lo"], dtype_key, device)
-        x = _numpy_to_torch(inputs["x"], dtype_key, device)
-        hi = _numpy_to_torch(inputs["hi"], dtype_key, device)
-        return op.torch_fn(lo, x, hi)
-    elif op.arity == OpArity.REDUCTION:
-        x = _numpy_to_torch(inputs["x"], dtype_key, device)
-        ndim = x.ndim
-        axis = ndim - 1 if ndim > 0 else 0
-        return op.torch_fn(x, axis)
-    elif op.arity == OpArity.MATMUL:
-        x = _numpy_to_torch(inputs["x"], dtype_key, device)
-        y = _numpy_to_torch(inputs["y"], dtype_key, device)
-        return op.torch_fn(x, y)
-    elif op.arity == OpArity.FFT:
-        x = _numpy_to_torch_complex(inputs["x"], device)
-        return op.torch_fn(x)
-    elif op.arity == OpArity.CONV:
-        inp = _numpy_to_torch(inputs["input"], dtype_key, device)
-        ker = _numpy_to_torch(inputs["kernel"], dtype_key, device)
-        return op.torch_fn(inp, ker)
-    elif op.arity == OpArity.TYPE_CAST:
-        x = _numpy_to_torch(inputs["x"], dtype_key, device)
-        return op.torch_fn(x)
-    else:
-        raise ValueError(f"Unsupported arity: {op.arity}")
+                   is_complex: bool = False):
+    """Run the PyTorch function with per-op call plans from registry."""
+    torch_call, using_aten = _resolve_torch_callable(op)
+    call_inputs = _prepare_torch_inputs(inputs, dtype_key, device, is_complex)
+
+    builder = op.torch_aten_builder if using_aten else op.torch_fn_builder
+    if builder is None:
+        raise ValueError(f"No torch builder for op: {op.name}")
+
+    args, kwargs = builder(call_inputs)
+    out = torch_call(*args, **kwargs)
+
+    if op.torch_output_adapter is not None:
+        out = op.torch_output_adapter(out, call_inputs)
+
+    return out
+
