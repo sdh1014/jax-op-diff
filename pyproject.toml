@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jax-op-diff"
+version = "0.1.0"
+description = "JAX vs PyTorch numerical precision testing framework"
+requires-python = ">=3.11"
+dependencies = [
+    "jax[cuda12]",
+    "torch",
+    "numpy",
+    "ml_dtypes",
+]
+
+[project.scripts]
+jax-op-diff = "precision_test.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["precision_test*"]
