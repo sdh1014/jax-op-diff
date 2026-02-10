@@ -37,12 +37,12 @@ def main():
     args = parser.parse_args()
 
     # Import after argparse to allow --help without GPU init
-    from precision_test.config import TestConfig
-    from precision_test.runner import run_all_tests, run_replay_tests
-    from precision_test.reporter import ReportGenerator
+    from jax_op_diff.config import TestConfig
+    from jax_op_diff.runner import run_all_tests, run_replay_tests
+    from jax_op_diff.reporter import ReportGenerator
 
     # Import all ops to trigger registration
-    import precision_test.ops.all_ops  # noqa: F401
+    import jax_op_diff.ops.all_ops  # noqa: F401
 
     config = TestConfig(
         seed=args.seed,

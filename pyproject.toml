@@ -15,8 +15,8 @@ dependencies = [
 ]
 
 [project.scripts]
-jax-op-diff = "precision_test.__main__:main"
+jax-op-diff = "jax_op_diff.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["python"]
-include = ["precision_test*"]
+include = ["jax_op_diff*"]
