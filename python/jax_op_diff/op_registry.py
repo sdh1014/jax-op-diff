@@ -110,7 +110,7 @@ def register(spec: OpSpec) -> OpSpec:
 
 
 def op_spec(name: str, category: str, arity: OpArity, *,
-            torch_fn: Optional[Callable],
+            torch_fn: Optional[Callable] = None,
             input_domain: InputDomain = InputDomain.REAL,
             shape_type: str = "elementwise",
             supported_dtypes: Optional[Tuple[str, ...]] = None,
