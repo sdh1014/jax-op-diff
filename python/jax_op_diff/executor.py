@@ -441,4 +441,3 @@ def _execute_torch(op: OpSpec, inputs: dict, dtype_key: str, device: str,
         out = op.torch_output_adapter(out, call_inputs)
 
     return out
-

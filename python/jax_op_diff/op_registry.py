@@ -276,7 +276,11 @@ def generate_inputs(op: OpSpec, shape, dtype_key: str, seed: int = 42) -> dict:
 
     elif op.arity == OpArity.BINARY:
         raw_x = _constrain(_raw(rng, shape), domain)
-        raw_y = _constrain(_raw(rng, shape), domain)
+        if op.name in {"scatter", "scatter_add", "scatter_max", "scatter_min", "scatter_mul", "scatter_sub"}:
+            flat_size = int(np.prod(shape))
+            raw_y = rng.permutation(flat_size).astype(np.float64).reshape(shape)
+        else:
+            raw_y = _constrain(_raw(rng, shape), domain)
         return {"x": _cast(raw_x, dtype_key), "y": _cast(raw_y, dtype_key)}
 
     elif op.arity == OpArity.TERNARY:

@@ -1356,6 +1356,16 @@ def _torch_linalg_eigh_vecs(x):
 def _torch_linalg_eig_vecs(x):
     return torch.linalg.eig(x).eigenvectors
 
+def _jax_linalg_eig_values_sorted(x):
+    eigvals = jax.lax.linalg.eig(
+        x,
+        compute_left_eigenvectors=False,
+        compute_right_eigenvectors=True,
+    )[0]
+    _, eigvals = jax.lax.sort_key_val(jax.lax.imag(eigvals), eigvals, dimension=-1)
+    _, eigvals = jax.lax.sort_key_val(jax.lax.real(eigvals), eigvals, dimension=-1)
+    return eigvals
+
 def _jax_linalg_householder_product(x):
     if x.shape[-1] < 2:
         return x
@@ -1402,7 +1412,7 @@ op_spec(
     torch_aten=AtenSpec("linalg_eig", "default"),
     shape_type="linalg",
     supported_dtypes=("float32",),
-)(lambda x: jax.lax.linalg.eig(x, compute_left_eigenvectors=False, compute_right_eigenvectors=True)[1])
+)(_jax_linalg_eig_values_sorted)
 op_spec(
     "eigh",
     "linalg",
@@ -1446,7 +1456,7 @@ op_spec(
     torch_aten=AtenSpec("linalg_qr", "default"),
     shape_type="linalg",
     supported_dtypes=("float32",),
-)(lambda x: jax.lax.linalg.qr(x)[0])
+)(lambda x: lax.abs(jax.lax.linalg.qr(x)[0]))
 op_spec(
     "svd",
     "linalg",
@@ -1454,7 +1464,7 @@ op_spec(
     torch_aten=AtenSpec("_linalg_svd", "default"),
     shape_type="linalg",
     supported_dtypes=("float32",),
-)(lambda x: jax.lax.linalg.svd(x, full_matrices=False)[0])
+)(lambda x: jax.lax.linalg.svd(x, full_matrices=False)[1])
 op_spec(
     "zeta",
     "special",
@@ -1623,13 +1633,30 @@ def _adapt_first(output, _inputs):
         return output[0]
     return output
 
-@output_adapter("top_k", "qr", "svd")
+@output_adapter("top_k")
 def _adapt_tuple_first(output, _inputs):
     if isinstance(output, tuple):
         return output[0]
     return output
 
-@output_adapter("eig", "eigh")
+@output_adapter("qr")
+def _adapt_tuple_first_abs(output, _inputs):
+    out = output[0] if isinstance(output, tuple) else output
+    return torch.abs(out)
+
+@output_adapter("svd")
+def _adapt_svd_singular_values(output, _inputs):
+    return output[1] if isinstance(output, tuple) else output
+
+@output_adapter("eig")
+def _adapt_eig_values_sorted(output, _inputs):
+    eigvals = output[0] if isinstance(output, tuple) else output
+    idx_imag = torch.argsort(torch.imag(eigvals), dim=-1, stable=True)
+    eigvals = torch.gather(eigvals, -1, idx_imag)
+    idx_real = torch.argsort(torch.real(eigvals), dim=-1, stable=True)
+    return torch.gather(eigvals, -1, idx_real)
+
+@output_adapter("eigh")
 def _adapt_tuple_second(output, _inputs):
     if isinstance(output, tuple):
         return output[1]
