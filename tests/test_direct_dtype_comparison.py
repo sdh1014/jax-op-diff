@@ -16,7 +16,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "python"))
 
 from jax_op_diff.config import ATOL_MAP, NP_DTYPE_MAP
-from jax_op_diff.executor import compute_metrics
+from jax_op_diff.executor import compute_metrics, compute_all_close
 from jax_op_diff.op_registry import generate_inputs, get_all_ops
 
 # make sure ops are registered
@@ -111,6 +111,20 @@ def test_float32_direct_close_to_f64_metrics():
 
     diff = abs(m_f64["max_abs_error"] - m_direct["max_abs_error"])
     assert diff < 1e-7
+
+
+def test_discrete_verdict_requires_exact_match():
+    """Discrete outputs (e.g. argmax indices) must be exact match."""
+    j = np.array([1000], dtype=np.int32)
+    t = np.array([1001], dtype=np.int32)
+    assert compute_all_close(j, t, "float32") is False
+
+
+def test_float_verdict_keeps_allclose_behavior():
+    """Floating outputs still use tolerance-based allclose."""
+    j = np.array([1000.0], dtype=np.float32)
+    t = np.array([1001.0], dtype=np.float32)
+    assert compute_all_close(j, t, "float32") is True
 
 
 _FAST_OP_NAMES = {"add", "mul"}

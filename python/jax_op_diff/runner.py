@@ -9,11 +9,11 @@ from typing import List, Optional, Set
 import h5py
 import numpy as np
 
-from .config import TestConfig, DEFAULT_CONFIG, ATOL_MAP, safe_shape_str
+from .config import TestConfig, DEFAULT_CONFIG, safe_shape_str
 from .op_registry import get_all_ops, OpSpec, OpArity, InputDomain, generate_inputs
 from .executor import (
     execute_single_test, PrecisionResult, _execute_jax,  # _execute_jax used by replay
-    compute_metrics, _should_skip_fp8_on_cpu,
+    compute_metrics, compute_all_close, _should_skip_fp8_on_cpu,
 )
 
 
@@ -40,16 +40,26 @@ class DumpManager:
     @staticmethod
     def _encode_array(arr: np.ndarray):
         a = np.asarray(arr)
-        if a.dtype.kind == "V":
-            return a.view(np.uint8), str(a.dtype)
-        return a, ""
+        dtype_module = getattr(a.dtype.type, "__module__", "")
+        if dtype_module.startswith("ml_dtypes"):
+            encoded = np.frombuffer(a.tobytes(), dtype=np.uint8)
+            return encoded, str(a.dtype), a.shape
+        return a, "", ()
 
     @staticmethod
     def _decode_array(dset):
         arr = np.array(dset)
         original_dtype = dset.attrs.get("original_dtype", "")
         if original_dtype:
-            arr = arr.view(np.dtype(original_dtype))
+            original_shape = dset.attrs.get("original_shape", None)
+            if original_shape is not None:
+                flat = np.frombuffer(
+                    np.asarray(arr, dtype=np.uint8).tobytes(),
+                    dtype=np.dtype(original_dtype),
+                )
+                arr = flat.reshape(tuple(original_shape))
+            else:
+                arr = arr.view(np.dtype(original_dtype))
         return arr
 
     def dump_test_case(self, op: OpSpec, shape, dtype_key: str,
@@ -71,18 +81,28 @@ class DumpManager:
             grp.attrs["arity"] = op.arity.value
 
             for key, arr in inputs.items():
+                if isinstance(arr, (str, bytes)):
+                    continue
                 if not (isinstance(arr, np.ndarray) or np.isscalar(arr)):
                     continue
-                encoded, original_dtype = self._encode_array(arr)
-                dset = grp.create_dataset(f"input_{key}", data=encoded, compression="gzip")
+                encoded, original_dtype, original_shape = self._encode_array(arr)
+                kwargs = {"data": encoded}
+                if np.asarray(encoded).ndim > 0:
+                    kwargs["compression"] = "gzip"
+                dset = grp.create_dataset(f"input_{key}", **kwargs)
                 if original_dtype:
                     dset.attrs["original_dtype"] = original_dtype
+                    dset.attrs["original_shape"] = original_shape
 
             if jax_output is not None:
-                encoded, original_dtype = self._encode_array(jax_output)
-                dset = grp.create_dataset("jax_output", data=encoded, compression="gzip")
+                encoded, original_dtype, original_shape = self._encode_array(jax_output)
+                kwargs = {"data": encoded}
+                if np.asarray(encoded).ndim > 0:
+                    kwargs["compression"] = "gzip"
+                dset = grp.create_dataset("jax_output", **kwargs)
                 if original_dtype:
                     dset.attrs["original_dtype"] = original_dtype
+                    dset.attrs["original_shape"] = original_shape
 
         self.case_index += 1
         return self.dump_path
@@ -119,8 +139,6 @@ def get_shapes_for_op(op: OpSpec, config: TestConfig) -> list:
 
 def get_dtypes_for_op(op: OpSpec, config: TestConfig) -> list:
     """Return applicable dtypes for an operator."""
-    if op.supported_dtypes:
-        return [d for d in op.supported_dtypes if d in config.dtypes]
     return list(config.dtypes)
 
 
@@ -230,7 +248,7 @@ def _replay_one_dump(
                 op_name=op_name, category=category, dtype=dtype_key,
                 shape=shape_str, max_abs_error=0, mean_abs_error=0,
                 max_rel_error=0, mean_rel_error=0, max_ulp_diff=0,
-                mean_ulp_diff=0, all_close=True, jax_has_nan=False,
+                mean_ulp_diff=0, all_close=False, jax_has_nan=False,
                 torch_has_nan=False, torch_missing=False,
                 matrix_rel_fro_error=0.0,
                 error_msg=fp8_skip)
@@ -303,12 +321,7 @@ def _replay_one_dump(
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             metrics = compute_metrics(stored_metric, fresh_metric, metric_dtype)
-            atol = ATOL_MAP.get(dtype_key, 1e-6)
-            all_close = bool(np.allclose(
-                stored_metric.astype(np.float64),
-                fresh_metric.astype(np.float64),
-                atol=atol, rtol=1e-3,
-            ))
+            all_close = compute_all_close(stored_metric, fresh_metric, dtype_key)
 
         return PrecisionResult(
             op_name=op_name, category=category, dtype=dtype_key,
@@ -341,10 +354,7 @@ def run_replay_tests(
 
     op_map = {op.name: op for op in get_all_ops()}
 
-    try:
-        device = jax.devices(config.jax_backend)[0]
-    except RuntimeError:
-        device = jax.devices("cpu")[0]
+    device = jax.devices(config.jax_backend)[0]
 
     dump_path = Path(dump_dir) / "dump.h5"
 

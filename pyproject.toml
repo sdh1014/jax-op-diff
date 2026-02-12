@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "JAX vs PyTorch numerical precision testing framework"
 requires-python = ">=3.11"
 dependencies = [
-    "jax[cuda12]",
+    "jax[cuda13]",
     "torch",
     "numpy",
     "ml_dtypes",

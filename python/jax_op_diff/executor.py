@@ -19,30 +19,19 @@ from .config import TestConfig, DTYPE_MAP, NP_DTYPE_MAP, ATOL_MAP, is_fp8, safe_
 # JAX lax ops that have known FP8 support (typically via promotion or dedicated kernels on GPU).
 # On CPU backend, most FP8 arithmetic is unsupported.
 _FP8_CPU_UNSUPPORTED_NOTE = (
-    "SKIPPED: FP8 dtype ({dtype}) is not supported on CPU backend ({backend}). "
+    "ERROR: FP8 dtype ({dtype}) is not supported on CPU backend ({backend}). "
     "FP8 computation requires GPU/TPU hardware support."
 )
 
 
 def _is_cpu_backend(config: TestConfig) -> bool:
     """Check if the effective JAX backend is CPU."""
-    if config.jax_backend == "cpu":
-        return True
-    # Also detect fallback: if requested backend is unavailable, JAX falls back to CPU
-    try:
-        jax.devices(config.jax_backend)
-        return False
-    except RuntimeError:
-        return True
+    return config.jax_backend == "cpu"
 
 
 def _is_cpu_torch_device(config: TestConfig) -> bool:
     """Check if the effective PyTorch device is CPU."""
-    if config.torch_device == "cpu":
-        return True
-    if config.torch_device == "cuda" and not torch.cuda.is_available():
-        return True
-    return False
+    return config.torch_device == "cpu"
 
 
 def _should_skip_fp8_on_cpu(dtype_key: str, config: TestConfig) -> str | None:
@@ -169,17 +158,33 @@ def compute_metrics(jax_result: np.ndarray, torch_result: np.ndarray,
     }
 
 
+def compute_all_close(jax_result: np.ndarray, torch_result: np.ndarray, dtype_key: str) -> bool:
+    """Compute verdict with dtype-aware semantics.
+
+    Discrete outputs (bool/int) require exact match; floating outputs use allclose.
+    """
+    j_arr = np.asarray(jax_result)
+    t_arr = np.asarray(torch_result)
+    if j_arr.shape != t_arr.shape:
+        return False
+
+    if (j_arr.dtype.kind in ("b", "i", "u")) or (t_arr.dtype.kind in ("b", "i", "u")):
+        return bool(np.array_equal(j_arr, t_arr))
+
+    atol = ATOL_MAP.get(dtype_key, 1e-6)
+    return bool(np.allclose(
+        j_arr.astype(np.float64),
+        t_arr.astype(np.float64),
+        atol=atol, rtol=1e-3,
+    ))
+
+
 def make_result(op_name: str, category: str, dtype: str, shape: str,
                 jax_result: np.ndarray, torch_result: np.ndarray,
                 dtype_key: str, notes: str = "") -> PrecisionResult:
     """Compute metrics and build a PrecisionResult."""
     metrics = compute_metrics(jax_result, torch_result, dtype_key)
-    atol = ATOL_MAP.get(dtype_key, 1e-6)
-    all_close = bool(np.allclose(
-        jax_result.astype(np.float64),
-        torch_result.astype(np.float64),
-        atol=atol, rtol=1e-3,
-    ))
+    all_close = compute_all_close(jax_result, torch_result, dtype_key)
     return PrecisionResult(
         op_name=op_name,
         category=category,
@@ -216,9 +221,6 @@ def _numpy_to_jax_complex(arr: np.ndarray, device=None):
 
 def _numpy_to_torch(arr: np.ndarray, dtype_key: str, device: str = "cpu"):
     """Convert numpy array to PyTorch tensor on target device."""
-    if is_fp8(dtype_key):
-        t = torch.tensor(arr.astype(np.float32), dtype=torch.float32, device=device)
-        return t
     torch_dtype = DTYPE_MAP[dtype_key]["torch"]
     t = torch.tensor(arr.astype(np.float32), dtype=torch_dtype, device=device)
     return t
@@ -258,14 +260,10 @@ def execute_single_test(op: OpSpec, shape, dtype_key: str,
         defaults.update(kw)
         return PrecisionResult(**defaults), None
 
-    # Check dtype support
-    if op.supported_dtypes and dtype_key not in op.supported_dtypes:
-        return _skip_result(error_msg="SKIPPED: dtype not supported by this op")
-
-    # Check FP8 on CPU: skip with explicit message
+    # Check FP8 on CPU: mark as ERROR with explicit message
     fp8_skip = _should_skip_fp8_on_cpu(dtype_key, config)
     if fp8_skip is not None:
-        return _skip_result(error_msg=fp8_skip)
+        return _skip_result(all_close=False, error_msg=fp8_skip)
 
     # Check torch availability
     if op.torch_fn is None and op.torch_aten is None:
@@ -278,24 +276,19 @@ def execute_single_test(op: OpSpec, shape, dtype_key: str,
         is_complex = op.input_domain == InputDomain.COMPLEX
 
         # --- JAX execution ---
-        try:
-            jax_device = jax.devices(config.jax_backend)[0]
-        except RuntimeError:
-            jax_device = jax.devices("cpu")[0]
+        jax_device = jax.devices(config.jax_backend)[0]
 
         jax_out = _execute_jax(op, inputs, dtype_key, jax_device, is_complex)
         jax_result = np.array(jax_out)
 
         # --- PyTorch execution ---
         torch_device = config.torch_device
-        if torch_device == "cuda" and not torch.cuda.is_available():
-            torch_device = "cpu"
+        if torch_device.startswith("cuda") and not torch.cuda.is_available():
+            raise RuntimeError(
+                f"PyTorch device '{torch_device}' is unavailable: CUDA is not available"
+            )
 
         torch_out = _execute_torch(op, inputs, dtype_key, torch_device, is_complex)
-
-        # For FP8 torch: cast result back to FP8 dtype for fair comparison
-        if is_fp8(dtype_key):
-            torch_out = torch_out.to(DTYPE_MAP[dtype_key]["torch"])
 
         torch_out_cpu = torch_out.detach().cpu()
         # bfloat16 and fp8 tensors can't be directly converted to numpy
@@ -324,12 +317,7 @@ def execute_single_test(op: OpSpec, shape, dtype_key: str,
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             metrics = compute_metrics(jax_for_metric, torch_for_metric, metric_dtype)
-            atol = ATOL_MAP.get(dtype_key, 1e-6)
-            all_close = bool(np.allclose(
-                jax_for_metric.astype(np.float64),
-                torch_for_metric.astype(np.float64),
-                atol=atol, rtol=1e-3,
-            ))
+            all_close = compute_all_close(jax_for_metric, torch_for_metric, dtype_key)
 
         result = PrecisionResult(
             op_name=op.name, category=op.category, dtype=dtype_key,
