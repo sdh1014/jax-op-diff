@@ -109,7 +109,7 @@ def compute_metrics(jax_result: np.ndarray, torch_result: np.ndarray,
     abs_diff = np.abs(j - t)
 
     matrix_rel_fro_error = 0.0
-    if j_arr.ndim >= 2:
+    if j_arr.ndim >= 1:
         delta = (j_arr.astype(np.float64) - t_arr.astype(np.float64)).reshape(-1)
         numer = np.linalg.norm(delta)
         denom_fro = np.linalg.norm(j_arr.astype(np.float64).reshape(-1))
