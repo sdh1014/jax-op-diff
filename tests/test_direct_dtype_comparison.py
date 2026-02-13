@@ -72,32 +72,34 @@ def allclose_f64(jax_result: np.ndarray, torch_result: np.ndarray, dtype_key: st
 
 
 @pytest.mark.parametrize(
-    "dtype_key,base,delta",
+    "dtype_key,j_val,t_val",
     [
-        ("bfloat16", 16.0, 0.06),
-        ("float8_e4m3fn", 1.0, 0.06),
-        ("float8_e5m2", 1.0, 0.06),
+        ("bfloat16", -0.01507568359375, -1.8984375),
+        ("float8_e4m3fn", -7.5, -1.25),
+        ("float8_e5m2", -0.00341796875, -0.015625),
     ],
 )
-def test_direct_metrics_hide_subulp_residual(dtype_key, base, delta):
-    """Direct comparison collapses sub-ULP residuals to zero in low precision."""
-    j = np.array([base, -base], dtype=NP_DTYPE_MAP[dtype_key])
-    t = np.array([base + delta, -base - delta], dtype=np.float32)
+def test_direct_metrics_smaller_with_same_dtype_inputs(dtype_key, j_val, t_val):
+    """Both sides start in the same low-precision dtype; direct arithmetic can hide error."""
+    dtype = NP_DTYPE_MAP[dtype_key]
+    j = np.array([j_val], dtype=dtype)
+    t = np.array([t_val], dtype=dtype)
 
     m_f64 = compute_metrics(j, t, dtype_key)
     m_direct = compute_metrics_direct(j, t, dtype_key)
 
     assert m_f64["max_abs_error"] > 0.0
-    assert m_direct["max_abs_error"] == 0.0
+    assert m_direct["max_abs_error"] < m_f64["max_abs_error"]
 
 
-def test_bfloat16_allclose_verdict_flips():
-    """float64 fails while strict original-dtype allclose passes."""
-    j = np.array([16.0], dtype=NP_DTYPE_MAP["bfloat16"])
-    t = np.array([16.06], dtype=np.float32)
+def test_fp8_allclose_verdict_flips_with_same_dtype_inputs():
+    """With same-dtype fp8 inputs, float64 can fail while direct allclose passes."""
+    dtype = NP_DTYPE_MAP["float8_e4m3fn"]
+    j = np.array([0.125], dtype=dtype)
+    t = np.array([-0.00390625], dtype=dtype)
 
-    assert allclose_f64(j, t, "bfloat16") is False
-    assert allclose_direct(j, t, "bfloat16") is True
+    assert allclose_f64(j, t, "float8_e4m3fn") is False
+    assert allclose_direct(j, t, "float8_e4m3fn") is True
 
 
 def test_float32_direct_close_to_f64_metrics():
@@ -127,16 +129,16 @@ def test_float_verdict_keeps_allclose_behavior():
     assert compute_all_close(j, t, "float32") is True
 
 
-_FAST_OP_NAMES = {"add", "mul"}
+_FAST_OP_NAMES = {"add", "mul", "broadcasted_iota"}
 _TEST_DTYPES = ["float32", "bfloat16"]
-_TEST_SHAPES = [(128,)]
+_TEST_SHAPES = [(128,), (4, 8)]
 
 
 def _get_test_ops():
     return [
         op
         for op in get_all_ops()
-        if op.name in _FAST_OP_NAMES and (op.torch_fn is not None or op.torch_aten is not None)
+        if op.name in _FAST_OP_NAMES and op.torch_fn is not None
     ]
 
 
@@ -172,6 +174,13 @@ def test_get_test_ops_is_really_fast_subset():
     ops = _get_test_ops()
     assert len(ops) > 0
     assert all(op.name in _FAST_OP_NAMES for op in ops)
+
+
+def test_broadcasted_iota_uses_explicit_builder_and_adapter():
+    op = next(op for op in get_all_ops() if op.name == "broadcasted_iota")
+    assert op.torch_fn is not None
+    assert op.torch_fn_builder is not None
+    assert op.torch_output_adapter is not None
 
 
 def test_real_ops_direct_not_larger_than_f64():

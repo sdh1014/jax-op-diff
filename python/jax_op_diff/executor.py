@@ -266,7 +266,7 @@ def execute_single_test(op: OpSpec, shape, dtype_key: str,
         return _skip_result(all_close=False, error_msg=fp8_skip)
 
     # Check torch availability
-    if op.torch_fn is None and op.torch_aten is None:
+    if op.torch_fn is None:
         return _skip_result(
             torch_missing=True,
             notes=f"MISSING: no PyTorch equivalent. {op.notes}")
@@ -378,18 +378,10 @@ def _execute_jax(op: OpSpec, inputs: dict, dtype_key: str, device, is_complex: b
 
 
 def _resolve_torch_callable(op: OpSpec):
-    """Resolve callable: ATen first, then torch_fn fallback."""
-    if op.torch_aten is not None:
-        try:
-            packet = getattr(torch.ops.aten, op.torch_aten.name)
-            return getattr(packet, op.torch_aten.overload), True
-        except AttributeError:
-            pass
-
-    if op.torch_fn is not None:
-        return op.torch_fn, False
-
-    raise ValueError(f"No torch mapping for op: {op.name}")
+    """Resolve callable from unified torch mapping."""
+    if op.torch_fn is None:
+        raise ValueError(f"No torch mapping for op: {op.name}")
+    return op.torch_fn
 
 
 def _prepare_torch_inputs(inputs: dict, dtype_key: str, device: str,
@@ -415,10 +407,10 @@ def _prepare_torch_inputs(inputs: dict, dtype_key: str, device: str,
 def _execute_torch(op: OpSpec, inputs: dict, dtype_key: str, device: str,
                    is_complex: bool = False):
     """Run the PyTorch function with per-op call plans from registry."""
-    torch_call, using_aten = _resolve_torch_callable(op)
+    torch_call = _resolve_torch_callable(op)
     call_inputs = _prepare_torch_inputs(inputs, dtype_key, device, is_complex)
 
-    builder = op.torch_aten_builder if using_aten else op.torch_fn_builder
+    builder = op.torch_fn_builder
     if builder is None:
         raise ValueError(f"No torch builder for op: {op.name}")
 

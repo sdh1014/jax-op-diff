@@ -36,25 +36,17 @@ class InputDomain(Enum):
 
 
 @dataclasses.dataclass
-class AtenSpec:
-    name: str
-    overload: str = "default"
-
-
-@dataclasses.dataclass
 class OpSpec:
     name: str
     category: str
     arity: OpArity
     jax_fn: Callable
-    torch_fn: Optional[Callable]
+    torch_fn: Optional[Callable] = None
     input_domain: InputDomain = InputDomain.REAL
     shape_type: str = "elementwise"  # elementwise / reduction / matmul / batch_matmul / conv / fft
     supported_dtypes: Optional[Tuple[str, ...]] = None  # None = all default dtypes
     notes: str = ""
-    torch_aten: Optional[AtenSpec] = None
     torch_input_keys: Optional[Tuple[str, ...]] = None
-    torch_aten_builder: Optional[Callable[[dict], tuple[tuple, dict]]] = None
     torch_fn_builder: Optional[Callable[[dict], tuple[tuple, dict]]] = None
     torch_output_adapter: Optional[Callable[[Any, dict], Any]] = None
 
@@ -96,8 +88,6 @@ def _identity_output(x: Any, _call_inputs: dict) -> Any:
 def register(spec: OpSpec) -> OpSpec:
     if spec.torch_input_keys is None:
         spec.torch_input_keys = _default_torch_input_keys(spec.arity)
-    if spec.torch_aten_builder is None:
-        spec.torch_aten_builder = _default_torch_builder(spec.arity, spec.torch_input_keys)
     if spec.torch_fn_builder is None:
         spec.torch_fn_builder = _default_torch_builder(spec.arity, spec.torch_input_keys)
     if spec.torch_output_adapter is None:
@@ -115,9 +105,7 @@ def op_spec(name: str, category: str, arity: OpArity, *,
             shape_type: str = "elementwise",
             supported_dtypes: Optional[Tuple[str, ...]] = None,
             notes: str = "",
-            torch_aten: Optional[AtenSpec] = None,
             torch_input_keys: Optional[Tuple[str, ...]] = None,
-            torch_aten_builder: Optional[Callable[[dict], tuple[tuple, dict]]] = None,
             torch_fn_builder: Optional[Callable[[dict], tuple[tuple, dict]]] = None,
             torch_output_adapter: Optional[Callable[[Any, dict], Any]] = None):
     """Decorator: register function as OpSpec jax_fn."""
@@ -132,9 +120,7 @@ def op_spec(name: str, category: str, arity: OpArity, *,
             shape_type=shape_type,
             supported_dtypes=supported_dtypes,
             notes=notes,
-            torch_aten=torch_aten,
             torch_input_keys=torch_input_keys,
-            torch_aten_builder=torch_aten_builder,
             torch_fn_builder=torch_fn_builder,
             torch_output_adapter=torch_output_adapter,
         ))
