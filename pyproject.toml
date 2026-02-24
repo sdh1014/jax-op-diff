@@ -21,3 +21,11 @@ jax-op-diff = "jax_op_diff.__main__:main"
 [tool.setuptools.packages.find]
 where = ["python"]
 include = ["jax_op_diff*"]
+
+[tool.pytest.ini_options]
+markers = [
+    "unit: pure numpy tests, no GPU needed",
+    "integration: needs JAX+Torch, CPU sufficient",
+    "e2e: needs GPU",
+]
+testpaths = ["tests"]

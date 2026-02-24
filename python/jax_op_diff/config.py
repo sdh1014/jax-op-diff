@@ -148,6 +148,50 @@ def section(title: str):
     print("=" * 80)
 
 
+# =============================================================================
+# Shape Selection
+# =============================================================================
+
+
+_SHAPE_TYPE_MAP = {
+    "elementwise":  lambda c: list(c.scalar_shapes + c.vector_shapes + c.matrix_shapes + c.higher_dim_shapes),
+    "reduction":    lambda c: list(c.vector_shapes + c.matrix_shapes + c.higher_dim_shapes),
+    "matmul":       lambda c: list(c.matmul_shapes),
+    "batch_matmul": lambda c: list(c.batch_matmul_shapes),
+    "conv":         lambda c: list(c.conv_shapes),
+    "fft":          lambda c: list(c.vector_shapes),
+    "linalg":       lambda c: list(c.linalg_shapes),
+    "linalg_solve": lambda c: list(c.linalg_solve_shapes),
+}
+
+
+def get_shapes_for_op(op, config: TestConfig) -> list:
+    """Return applicable shapes for an operator.
+
+    Priority: op.custom_shapes > op.shape_type > arity default inference.
+    """
+    # Lazy import to avoid circular dependency
+    from .op_registry import _UNIQUE_ARITY_SHAPE_TYPE
+
+    # 1. Op-level custom shapes (highest priority)
+    if hasattr(op, "custom_shapes") and op.custom_shapes:
+        return list(op.custom_shapes)
+
+    # 2. Explicit shape_type
+    if op.shape_type is not None:
+        getter = _SHAPE_TYPE_MAP.get(op.shape_type)
+        if getter is not None:
+            return getter(config)
+
+    # 3. Infer from arity (only for unambiguous arities)
+    default = _UNIQUE_ARITY_SHAPE_TYPE.get(op.arity)
+    if default is not None:
+        return _SHAPE_TYPE_MAP[default](config)
+
+    # Fallback: elementwise (keeps backwards compat during transition)
+    return _SHAPE_TYPE_MAP["elementwise"](config)
+
+
 def safe_shape_str(shape) -> str:
     """Convert shape to a filesystem-safe string."""
     if isinstance(shape, dict):

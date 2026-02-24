@@ -43,7 +43,8 @@ class OpSpec:
     jax_fn: Callable
     torch_fn: Optional[Callable] = None
     input_domain: InputDomain = InputDomain.REAL
-    shape_type: str = "elementwise"  # elementwise / reduction / matmul / batch_matmul / conv / fft
+    shape_type: Optional[str] = "elementwise"  # None = infer from arity
+    custom_shapes: Optional[Tuple] = None  # Op-level custom shapes (highest priority)
     supported_dtypes: Optional[Tuple[str, ...]] = None  # None = all default dtypes
     notes: str = ""
     torch_input_keys: Optional[Tuple[str, ...]] = None
@@ -52,6 +53,81 @@ class OpSpec:
 
 
 _REGISTRY: List[OpSpec] = []
+
+
+# =============================================================================
+# Schema Validation (v4)
+# =============================================================================
+
+_VALID_SHAPE_TYPES = frozenset({
+    "elementwise", "reduction", "matmul", "batch_matmul",
+    "conv", "fft", "linalg", "linalg_solve",
+})
+
+_VALID_DTYPE_KEYS = frozenset({
+    "float32", "bfloat16", "float8_e4m3fn", "float8_e5m2",
+})
+
+_ARITY_EXPECTED_INPUT_COUNTS = {
+    OpArity.UNARY: 1,
+    OpArity.BINARY: 2,
+    OpArity.TERNARY: 3,
+    OpArity.REDUCTION: 1,
+    OpArity.MATMUL: 2,
+    OpArity.CONV: 2,
+    OpArity.FFT: 1,
+    OpArity.TYPE_CAST: 1,
+}
+
+# Arities that can unambiguously infer a unique shape_type
+_UNIQUE_ARITY_SHAPE_TYPE = {
+    OpArity.REDUCTION: "reduction",
+    OpArity.TERNARY: "elementwise",
+    OpArity.CONV: "conv",
+    OpArity.FFT: "fft",
+    OpArity.TYPE_CAST: "elementwise",
+}
+
+
+def _validate_op_schema(spec: OpSpec) -> None:
+    """Validate OpSpec at registration time. Raises ValueError on any issue."""
+    errors = []
+
+    # 1. shape_type validity
+    if spec.shape_type is not None and spec.shape_type not in _VALID_SHAPE_TYPES:
+        errors.append(
+            f"unknown shape_type='{spec.shape_type}', "
+            f"valid: {sorted(_VALID_SHAPE_TYPES)}"
+        )
+
+    # 2. supported_dtypes validity
+    if spec.supported_dtypes:
+        bad = set(spec.supported_dtypes) - _VALID_DTYPE_KEYS
+        if bad:
+            errors.append(f"unknown dtypes {bad}, valid: {sorted(_VALID_DTYPE_KEYS)}")
+
+    # 3. torch_fn_builder requires torch_fn
+    if spec.torch_fn is None and spec.torch_fn_builder is not None:
+        errors.append("torch_fn_builder set but torch_fn is None")
+
+    # 4. torch_output_adapter requires torch_fn
+    if spec.torch_fn is None and spec.torch_output_adapter is not None:
+        errors.append("torch_output_adapter set but torch_fn is None")
+
+    # 5. torch_input_keys count must match arity
+    if spec.torch_input_keys is not None:
+        expected = _ARITY_EXPECTED_INPUT_COUNTS.get(spec.arity)
+        if expected is not None and len(spec.torch_input_keys) != expected:
+            errors.append(
+                f"torch_input_keys has {len(spec.torch_input_keys)} keys "
+                f"but arity {spec.arity.value} expects {expected}"
+            )
+
+    if errors:
+        raise ValueError(
+            f"OpSpec '{spec.name}' schema validation failed:\n"
+            + "\n".join(f"  - {e}" for e in errors)
+        )
 
 
 def _default_torch_input_keys(arity: OpArity) -> Tuple[str, ...]:
@@ -86,6 +162,8 @@ def _identity_output(x: Any, _call_inputs: dict) -> Any:
 
 
 def register(spec: OpSpec) -> OpSpec:
+    _validate_op_schema(spec)  # Fail-fast at import time
+
     if spec.torch_input_keys is None:
         spec.torch_input_keys = _default_torch_input_keys(spec.arity)
     if spec.torch_fn_builder is None:
@@ -102,7 +180,8 @@ def register(spec: OpSpec) -> OpSpec:
 def op_spec(name: str, category: str, arity: OpArity, *,
             torch_fn: Optional[Callable] = None,
             input_domain: InputDomain = InputDomain.REAL,
-            shape_type: str = "elementwise",
+            shape_type: Optional[str] = "elementwise",
+            custom_shapes: Optional[Tuple] = None,
             supported_dtypes: Optional[Tuple[str, ...]] = None,
             notes: str = "",
             torch_input_keys: Optional[Tuple[str, ...]] = None,
@@ -118,6 +197,7 @@ def op_spec(name: str, category: str, arity: OpArity, *,
             torch_fn=torch_fn,
             input_domain=input_domain,
             shape_type=shape_type,
+            custom_shapes=custom_shapes,
             supported_dtypes=supported_dtypes,
             notes=notes,
             torch_input_keys=torch_input_keys,

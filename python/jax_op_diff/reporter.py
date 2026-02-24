@@ -5,7 +5,7 @@ import dataclasses
 import os
 from typing import List
 
-from .executor import PrecisionResult
+from .core import PrecisionResult
 
 
 class ReportGenerator:
