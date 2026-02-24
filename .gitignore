@@ -27,3 +27,6 @@ output/
 
 # AGENTS.md
 AGENTS.md
+
+# Research docs (symlink to .claude memory)
+research.md

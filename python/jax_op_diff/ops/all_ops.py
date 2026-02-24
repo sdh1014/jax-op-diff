@@ -59,7 +59,7 @@ op_spec(
     "basic",
     OpArity.UNARY,
     torch_fn=lambda x: torch.pow(x, 3),
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
     notes="integer_pow with exponent=3",
 )(lambda x: lax.integer_pow(x, 3))
 op_spec(
@@ -482,7 +482,7 @@ op_spec(
     OpArity.BINARY,
     torch_fn_builder=lambda inputs: _build_bitwise_binary_i32(inputs),
     torch_fn=torch.ops.aten.bitwise_and.Tensor,
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lambda x, y: lax.bitwise_and(_jax_i32(x), _jax_i32(y)))
 op_spec(
     "bitwise_not",
@@ -490,7 +490,7 @@ op_spec(
     OpArity.UNARY,
     torch_fn_builder=lambda inputs: _build_bitwise_not_i32(inputs),
     torch_fn=torch.ops.aten.bitwise_not.default,
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lambda x: lax.bitwise_not(_jax_i32(x)))
 op_spec(
     "bitwise_or",
@@ -498,7 +498,7 @@ op_spec(
     OpArity.BINARY,
     torch_fn_builder=lambda inputs: _build_bitwise_binary_i32(inputs),
     torch_fn=torch.ops.aten.bitwise_or.Tensor,
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lambda x, y: lax.bitwise_or(_jax_i32(x), _jax_i32(y)))
 op_spec(
     "bitwise_xor",
@@ -506,7 +506,7 @@ op_spec(
     OpArity.BINARY,
     torch_fn_builder=lambda inputs: _build_bitwise_binary_i32(inputs),
     torch_fn=torch.ops.aten.bitwise_xor.Tensor,
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lambda x, y: lax.bitwise_xor(_jax_i32(x), _jax_i32(y)))
 op_spec(
     "shift_left",
@@ -514,7 +514,7 @@ op_spec(
     OpArity.BINARY,
     torch_fn_builder=lambda inputs: _build_shift_i32(inputs),
     torch_fn=torch.ops.aten.bitwise_left_shift.Tensor,
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lambda x, y: lax.shift_left(_jax_i32(x), _jax_shift_amount(y)))
 op_spec(
     "shift_right_arithmetic",
@@ -522,14 +522,14 @@ op_spec(
     OpArity.BINARY,
     torch_fn_builder=lambda inputs: _build_shift_i32(inputs),
     torch_fn=torch.ops.aten.bitwise_right_shift.Tensor,
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lambda x, y: lax.shift_right_arithmetic(_jax_i32(x), _jax_shift_amount(y)))
 op_spec(
     "shift_right_logical",
     "bitwise",
     OpArity.BINARY,
     torch_fn=_torch_shift_right_logical,
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lambda x, y: lax.shift_right_logical(_jax_i32(x), _jax_shift_amount(y)))
 
 op_spec(
@@ -539,7 +539,7 @@ op_spec(
     torch_fn_builder=lambda inputs: _build_concatenate(inputs),
     torch_fn=torch.ops.aten.cat.default,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lambda x, y: lax.concatenate((x, y), dimension=x.ndim - 1))
 op_spec(
     "full",
@@ -547,7 +547,7 @@ op_spec(
     OpArity.UNARY,
     torch_fn_builder=lambda inputs: _build_full_from_x(inputs),
     torch_fn=torch.ops.aten.full.default,
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lambda x: lax.full(x.shape, jnp.mean(x, dtype=jnp.float32), x.dtype))
 op_spec(
     "full_like",
@@ -555,7 +555,7 @@ op_spec(
     OpArity.UNARY,
     torch_fn_builder=lambda inputs: _build_full_like_from_x(inputs),
     torch_fn=torch.ops.aten.full_like.default,
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lambda x: lax.full_like(x, jnp.mean(x, dtype=jnp.float32)))
 op_spec(
     "reshape",
@@ -564,7 +564,7 @@ op_spec(
     torch_fn_builder=lambda inputs: _build_reshape_reverse(inputs),
     torch_fn=torch.ops.aten.reshape.default,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lambda x: lax.reshape(x, x.shape[::-1]))
 op_spec(
     "rev",
@@ -573,7 +573,7 @@ op_spec(
     torch_fn_builder=lambda inputs: _build_rev_last(inputs),
     torch_fn=torch.ops.aten.flip.default,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lambda x: lax.rev(x, dimensions=(x.ndim - 1,)))
 op_spec(
     "split",
@@ -583,7 +583,7 @@ op_spec(
     torch_output_adapter=lambda output, inputs: _adapt_split_first(output, inputs),
     torch_fn=torch.ops.aten.split.sizes,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(_jax_split_first_half)
 op_spec(
     "squeeze",
@@ -592,7 +592,7 @@ op_spec(
     torch_fn_builder=lambda inputs: _build_squeeze_noop(inputs),
     torch_fn=torch.ops.aten.squeeze.dim,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lambda x: lax.squeeze(lax.expand_dims(x, (0,)), dimensions=(0,)))
 op_spec(
     "tile",
@@ -601,7 +601,7 @@ op_spec(
     torch_fn_builder=lambda inputs: _build_tile_leading(inputs),
     torch_fn=torch.ops.aten.tile.default,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(_jax_tile_leading)
 op_spec(
     "transpose",
@@ -610,7 +610,7 @@ op_spec(
     torch_fn_builder=lambda inputs: _build_transpose_reverse(inputs),
     torch_fn=torch.ops.aten.permute.default,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(_jax_transpose_reverse)
 
 op_spec(
@@ -619,7 +619,7 @@ op_spec(
     OpArity.BINARY,
     torch_fn=_torch_gather_last,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(_jax_gather_last)
 op_spec(
     "pad",
@@ -628,7 +628,7 @@ op_spec(
     torch_fn_builder=lambda inputs: _build_pad_one(inputs),
     torch_fn=torch.ops.aten.pad.default,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(_jax_pad_one)
 op_spec(
     "scatter",
@@ -636,7 +636,7 @@ op_spec(
     OpArity.BINARY,
     torch_fn=None,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
     notes=(
         "TODO: jax.lax.scatter set semantics (conflicting indices update order) "
         "is not strict 1:1 with current PyTorch path."
@@ -648,7 +648,7 @@ op_spec(
     OpArity.BINARY,
     torch_fn=None,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
     notes=(
         "TODO: jax.lax.scatter_add semantics with conflicting indices is not "
         "strict 1:1 with current PyTorch path."
@@ -660,7 +660,7 @@ op_spec(
     OpArity.BINARY,
     torch_fn=None,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
     notes=(
         "TODO: jax.lax.scatter_max semantics with conflicting indices is not "
         "strict 1:1 with current PyTorch path."
@@ -672,7 +672,7 @@ op_spec(
     OpArity.BINARY,
     torch_fn=None,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
     notes=(
         "TODO: jax.lax.scatter_min semantics with conflicting indices is not "
         "strict 1:1 with current PyTorch path."
@@ -685,7 +685,7 @@ op_spec(
     torch_fn_builder=lambda inputs: _build_slice_last_half(inputs),
     torch_fn=torch.ops.aten.slice.Tensor,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(_jax_slice_last_half)
 op_spec(
     "top_k",
@@ -695,7 +695,7 @@ op_spec(
     torch_output_adapter=lambda output, inputs: _adapt_tuple_first(output, inputs),
     torch_fn=torch.ops.aten.topk.default,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lambda x: lax.top_k(x, k=min(5, x.shape[-1]))[0])
 
 # =============================================================================
@@ -796,7 +796,7 @@ op_spec(
     OpArity.UNARY,
     torch_fn=None,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
     notes="TODO: no strict 1:1 ATen mapping",
 )(lambda x: lax.approx_max_k(x, k=min(5, x.shape[-1]))[0])
 op_spec(
@@ -805,7 +805,7 @@ op_spec(
     OpArity.UNARY,
     torch_fn=None,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
     notes="TODO: no strict 1:1 ATen mapping",
 )(lambda x: lax.approx_min_k(x, k=min(5, x.shape[-1]))[0])
 op_spec(
@@ -815,7 +815,7 @@ op_spec(
     torch_fn_builder=lambda inputs: _build_broadcast_leading2(inputs),
     torch_fn=torch.ops.aten.expand.default,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lambda x: lax.broadcast(x, sizes=(2,)))
 op_spec(
     "broadcast_in_dim",
@@ -823,7 +823,7 @@ op_spec(
     OpArity.UNARY,
     torch_fn=_torch_broadcast_in_dim_leading2,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(_jax_broadcast_in_dim_leading2)
 op_spec(
     "broadcast_to_rank",
@@ -832,7 +832,7 @@ op_spec(
     torch_fn_builder=lambda inputs: _build_broadcast_to_rank_plus1(inputs),
     torch_fn=torch.ops.aten.unsqueeze.default,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lambda x: lax.broadcast_to_rank(x, x.ndim + 1))
 op_spec(
     "broadcasted_iota",
@@ -842,7 +842,7 @@ op_spec(
     torch_output_adapter=lambda output, inputs: _adapt_broadcasted_iota(output, inputs),
     torch_fn=torch.ops.aten.arange.start_step,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lambda x: lax.broadcasted_iota(x.dtype, shape=x.shape, dimension=x.ndim - 1))
 op_spec(
     "collapse",
@@ -851,7 +851,7 @@ op_spec(
     torch_fn_builder=lambda inputs: _build_collapse_first2(inputs),
     torch_fn=torch.ops.aten.reshape.default,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(_jax_collapse_first2)
 op_spec(
     "expand_dims",
@@ -860,7 +860,7 @@ op_spec(
     torch_fn_builder=lambda inputs: _build_expand_dims_front(inputs),
     torch_fn=torch.ops.aten.unsqueeze.default,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lambda x: lax.expand_dims(x, (0,)))
 op_spec(
     "iota",
@@ -869,7 +869,7 @@ op_spec(
     torch_fn_builder=lambda inputs: _build_iota_last_dim(inputs),
     torch_fn=torch.ops.aten.arange.start_step,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lambda x: lax.iota(x.dtype, x.shape[-1]))
 
 op_spec(
@@ -879,7 +879,7 @@ op_spec(
     torch_fn_builder=lambda inputs: _build_select_last_middle(inputs),
     torch_fn=torch.ops.aten.select.int,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(_jax_dynamic_index_in_dim_last)
 op_spec(
     "dynamic_slice",
@@ -888,7 +888,7 @@ op_spec(
     torch_fn_builder=lambda inputs: _build_slice_like_last_half(inputs),
     torch_fn=torch.ops.aten.slice.Tensor,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(_jax_dynamic_slice_last_half)
 op_spec(
     "dynamic_slice_in_dim",
@@ -897,7 +897,7 @@ op_spec(
     torch_fn_builder=lambda inputs: _build_slice_like_last_half(inputs),
     torch_fn=torch.ops.aten.slice.Tensor,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(_jax_dynamic_slice_in_dim_last_half)
 op_spec(
     "dynamic_update_slice",
@@ -905,7 +905,7 @@ op_spec(
     OpArity.BINARY,
     torch_fn=_torch_dynamic_update_slice_prefix,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(_jax_dynamic_update_slice_prefix)
 op_spec(
     "dynamic_update_slice_in_dim",
@@ -913,7 +913,7 @@ op_spec(
     OpArity.BINARY,
     torch_fn=_torch_dynamic_update_slice_in_dim_prefix,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(_jax_dynamic_update_slice_in_dim_prefix)
 op_spec(
     "dynamic_update_index_in_dim",
@@ -921,7 +921,7 @@ op_spec(
     OpArity.BINARY,
     torch_fn=_torch_dynamic_update_index_in_dim_last,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(
     _jax_dynamic_update_index_in_dim_last
 )
@@ -932,7 +932,7 @@ op_spec(
     torch_fn_builder=lambda inputs: _build_select_last_middle(inputs),
     torch_fn=torch.ops.aten.select.int,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lambda x: lax.index_in_dim(x, x.shape[-1] // 2, axis=-1, keepdims=False))
 op_spec(
     "index_take",
@@ -940,7 +940,7 @@ op_spec(
     OpArity.UNARY,
     torch_fn=_torch_index_take_last_two,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(_jax_index_take_last_two)
 op_spec(
     "slice_in_dim",
@@ -949,7 +949,7 @@ op_spec(
     torch_fn_builder=lambda inputs: _build_slice_like_last_half(inputs),
     torch_fn=torch.ops.aten.slice.Tensor,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(_jax_slice_in_dim_last_half)
 op_spec(
     "sort_key_val",
@@ -957,7 +957,7 @@ op_spec(
     OpArity.UNARY,
     torch_fn=_torch_sort_key_val_keys,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lambda x: lax.sort_key_val(x, -x, dimension=-1, is_stable=True)[0])
 op_spec(
     "scatter_mul",
@@ -965,7 +965,7 @@ op_spec(
     OpArity.BINARY,
     torch_fn=None,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
     notes=(
         "TODO: jax.lax.scatter_mul semantics with conflicting indices is not "
         "strict 1:1 with current PyTorch path."
@@ -977,7 +977,7 @@ op_spec(
     OpArity.BINARY,
     torch_fn=None,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
     notes=(
         "TODO: jax.lax.scatter_sub semantics with conflicting indices is not "
         "strict 1:1 with current PyTorch path."
@@ -991,7 +991,7 @@ op_spec(
     torch_fn_builder=lambda inputs: _build_reduce_bool_dim(inputs),
     torch_fn=torch.ops.aten.all.dim,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lambda x, axis: lax.reduce_and(x > 0, axes=(axis,)))
 op_spec(
     "reduce_or",
@@ -1000,7 +1000,7 @@ op_spec(
     torch_fn_builder=lambda inputs: _build_reduce_bool_dim(inputs),
     torch_fn=torch.ops.aten.any.dim,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lambda x, axis: lax.reduce_or(x > 0, axes=(axis,)))
 op_spec(
     "reduce_xor",
@@ -1008,7 +1008,7 @@ op_spec(
     OpArity.REDUCTION,
     torch_fn=lambda x, axis: torch.remainder((x > 0).to(torch.int32).sum(dim=axis), 2).to(torch.bool),
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
     notes="Reduce xor on predicate (x > 0)",
 )(lambda x, axis: lax.reduce_xor(x > 0, axes=(axis,)))
 
@@ -1052,7 +1052,7 @@ op_spec(
     "complex",
     OpArity.BINARY,
     torch_fn=torch.ops.aten.complex.default,
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
     notes="Constructs complex from real and imag parts",
 )(lax.complex)
 op_spec(
@@ -1062,7 +1062,7 @@ op_spec(
     torch_output_adapter=lambda output, inputs: _adapt_conj_resolved(output, inputs),
     torch_fn=torch.ops.aten.conj.default,
     input_domain=InputDomain.COMPLEX,
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
     notes="torch.conj returns lazy view; need resolve_conj() for numpy()",
 )(lax.conj)
 op_spec(
@@ -1071,7 +1071,7 @@ op_spec(
     OpArity.UNARY,
     torch_fn=torch.ops.aten.real.default,
     input_domain=InputDomain.COMPLEX,
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lax.real)
 op_spec(
     "imag",
@@ -1079,7 +1079,7 @@ op_spec(
     OpArity.UNARY,
     torch_fn=torch.ops.aten.imag.default,
     input_domain=InputDomain.COMPLEX,
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lax.imag)
 
 # =============================================================================
@@ -1217,7 +1217,6 @@ op_spec(
     OpArity.MATMUL,
     torch_fn=torch.ops.aten.matmul.default,
     shape_type="matmul",
-    supported_dtypes=("float32", "bfloat16"),
 )(lax.dot)
 op_spec(
     "batch_matmul",
@@ -1225,7 +1224,7 @@ op_spec(
     OpArity.MATMUL,
     torch_fn=torch.ops.aten.bmm.default,
     shape_type="batch_matmul",
-    supported_dtypes=("float32", "bfloat16"),
+    # supported_dtypes=("float32", "bfloat16"),
 )(lax.batch_matmul)
 
 # --- Cholesky decomposition ---
@@ -1236,7 +1235,7 @@ op_spec(
     torch_fn=torch.ops.aten.linalg_cholesky.default,
     input_domain=InputDomain.POSITIVE_DEFINITE,
     shape_type="linalg",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
     notes="Input: positive definite matrix",
 )(lambda x: jax.lax.linalg.cholesky(x))
 
@@ -1248,7 +1247,7 @@ op_spec(
     torch_fn=torch.ops.aten.linalg_solve_triangular.default,
     input_domain=InputDomain.LOWER_TRIANGULAR,
     shape_type="linalg_solve",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
     notes="Solve A @ x = b where A is lower triangular",
 )(lambda a, b: jax.lax.linalg.triangular_solve(a, b, left_side=True, lower=True))
 
@@ -1280,7 +1279,7 @@ op_spec(
     torch_output_adapter=lambda output, inputs: _adapt_eig_values_sorted(output, inputs),
     torch_fn=torch.ops.aten.linalg_eig.default,
     shape_type="linalg",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(_jax_linalg_eig_values_sorted)
 op_spec(
     "eigh",
@@ -1290,7 +1289,7 @@ op_spec(
     torch_fn=torch.ops.aten._linalg_eigh.default,
     input_domain=InputDomain.POSITIVE_DEFINITE,
     shape_type="linalg",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lambda x: jax.lax.linalg.eigh(x)[0])
 op_spec(
     "householder_product",
@@ -1300,7 +1299,7 @@ op_spec(
     torch_output_adapter=lambda output, inputs: _adapt_householder_product(output, inputs),
     torch_fn=torch.ops.aten.linalg_householder_product.default,
     shape_type="linalg",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(_jax_linalg_householder_product)
 op_spec(
     "lu",
@@ -1308,7 +1307,7 @@ op_spec(
     OpArity.UNARY,
     torch_fn=lambda x: torch.linalg.lu_factor(x)[0],
     shape_type="linalg",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lambda x: jax.lax.linalg.lu(x)[0])
 op_spec(
     "lu_pivots_to_permutation",
@@ -1316,7 +1315,7 @@ op_spec(
     OpArity.UNARY,
     torch_fn=None,
     shape_type="linalg",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
     notes="TODO: no strict 1:1 ATen mapping",
 )(_jax_lu_pivots_to_perm)
 op_spec(
@@ -1326,7 +1325,7 @@ op_spec(
     torch_output_adapter=lambda output, inputs: _adapt_tuple_first_abs(output, inputs),
     torch_fn=torch.ops.aten.linalg_qr.default,
     shape_type="linalg",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lambda x: lax.abs(jax.lax.linalg.qr(x)[0]))
 op_spec(
     "svd",
@@ -1335,7 +1334,7 @@ op_spec(
     torch_output_adapter=lambda output, inputs: _adapt_svd_singular_values(output, inputs),
     torch_fn=torch.ops.aten._linalg_svd.default,
     shape_type="linalg",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lambda x: jax.lax.linalg.svd(x, full_matrices=False)[1])
 op_spec(
     "zeta",
@@ -1344,7 +1343,7 @@ op_spec(
     torch_fn_builder=lambda inputs: _build_zeta_shifted(inputs),
     torch_fn=torch.ops.aten.special_zeta.default,
     shape_type="reduction",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
 )(lambda x, y: lax.zeta(lax.abs(x) + 2.0, lax.abs(y) + 1.0))
 
 # --- Convolution ---
@@ -1364,7 +1363,7 @@ op_spec(
     torch_fn_builder=lambda inputs: _build_convolution(inputs),
     torch_fn=torch.ops.aten.convolution.default,
     shape_type="conv",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
     notes="Both use NCHW layout; JAX via dimension_numbers, torch via F.conv",
 )(_jax_conv)
 
@@ -1380,7 +1379,7 @@ op_spec(
     torch_fn=torch.ops.aten.fft_fft.default,
     input_domain=InputDomain.COMPLEX,
     shape_type="fft",
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
     notes="Complex-to-complex FFT",
 )(lambda x: lax.fft(x, fft_type="FFT", fft_lengths=(x.shape[-1],)))
 
@@ -1389,7 +1388,7 @@ op_spec(
     "type_cast",
     OpArity.TYPE_CAST,
     torch_fn=lambda x: x.to(torch.bfloat16),
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
     notes="Cast float32 to bfloat16",
 )(lambda x: lax.convert_element_type(x, jnp.bfloat16))
 op_spec(
@@ -1397,7 +1396,7 @@ op_spec(
     "type_cast",
     OpArity.TYPE_CAST,
     torch_fn=lambda x: x.view(torch.int32),
-    supported_dtypes=("float32",),
+    # supported_dtypes=("float32",),
     notes="Bitcast float32 to int32",
 )(lambda x: lax.bitcast_convert_type(x, jnp.int32))
 
