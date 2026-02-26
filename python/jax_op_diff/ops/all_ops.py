@@ -428,32 +428,112 @@ def _jax_pad_one(x):
     config = [(1, 1, 0)] * x.ndim
     return lax.pad(x, jnp.array(0, dtype=x.dtype), config)
 
+
+_SCATTER_DNUMS_FLAT = lax.ScatterDimensionNumbers(
+    update_window_dims=(),
+    inserted_window_dims=(0,),
+    scatter_dims_to_operand_dims=(0,),
+)
+
+
+def _jax_scatter_unique_index_flat(x):
+    return lax.reshape(lax.iota(jnp.int32, x.size), (x.size, 1))
+
+
+def _torch_scatter_unique_index_flat(x):
+    return torch.arange(x.numel(), dtype=torch.int64, device=x.device)
+
+
 def _jax_scatter_index_flat(x, y):
     return jnp.mod(jnp.abs(_jax_i32(y.reshape(-1))), x.size)
 
 def _jax_scatter_set_flat(x, y):
+    return lax.reshape(
+        lax.scatter(
+            lax.reshape(x, (x.size,)),
+            _jax_scatter_unique_index_flat(x),
+            lax.reshape(y, (x.size,)),
+            _SCATTER_DNUMS_FLAT,
+            indices_are_sorted=True,
+            unique_indices=True,
+            mode=lax.GatherScatterMode.PROMISE_IN_BOUNDS,
+        ),
+        x.shape,
+    )
+
+
+def _torch_scatter_set_flat(x, y):
     flat_x = x.reshape(-1)
     flat_y = y.reshape(-1)
-    idx = _jax_scatter_index_flat(x, y)
-    return flat_x.at[idx].set(flat_y).reshape(x.shape)
+    idx = _torch_scatter_unique_index_flat(x)
+    return torch.ops.aten.scatter.src(flat_x, 0, idx, flat_y).reshape(x.shape)
 
 def _jax_scatter_add_flat(x, y):
+    return lax.reshape(
+        lax.scatter_add(
+            lax.reshape(x, (x.size,)),
+            _jax_scatter_unique_index_flat(x),
+            lax.reshape(y, (x.size,)),
+            _SCATTER_DNUMS_FLAT,
+            indices_are_sorted=True,
+            unique_indices=True,
+            mode=lax.GatherScatterMode.PROMISE_IN_BOUNDS,
+        ),
+        x.shape,
+    )
+
+
+def _torch_scatter_add_flat(x, y):
     flat_x = x.reshape(-1)
     flat_y = y.reshape(-1)
-    idx = _jax_scatter_index_flat(x, y)
-    return flat_x.at[idx].add(flat_y).reshape(x.shape)
+    idx = _torch_scatter_unique_index_flat(x)
+    return torch.ops.aten.scatter_add.default(flat_x, 0, idx, flat_y).reshape(x.shape)
 
 def _jax_scatter_max_flat(x, y):
+    return lax.reshape(
+        lax.scatter_max(
+            lax.reshape(x, (x.size,)),
+            _jax_scatter_unique_index_flat(x),
+            lax.reshape(y, (x.size,)),
+            _SCATTER_DNUMS_FLAT,
+            indices_are_sorted=True,
+            unique_indices=True,
+            mode=lax.GatherScatterMode.PROMISE_IN_BOUNDS,
+        ),
+        x.shape,
+    )
+
+
+def _torch_scatter_max_flat(x, y):
     flat_x = x.reshape(-1)
     flat_y = y.reshape(-1)
-    idx = _jax_scatter_index_flat(x, y)
-    return flat_x.at[idx].max(flat_y).reshape(x.shape)
+    idx = _torch_scatter_unique_index_flat(x)
+    return torch.ops.aten.scatter_reduce.two(
+        flat_x, 0, idx, flat_y, "amax", include_self=True
+    ).reshape(x.shape)
 
 def _jax_scatter_min_flat(x, y):
+    return lax.reshape(
+        lax.scatter_min(
+            lax.reshape(x, (x.size,)),
+            _jax_scatter_unique_index_flat(x),
+            lax.reshape(y, (x.size,)),
+            _SCATTER_DNUMS_FLAT,
+            indices_are_sorted=True,
+            unique_indices=True,
+            mode=lax.GatherScatterMode.PROMISE_IN_BOUNDS,
+        ),
+        x.shape,
+    )
+
+
+def _torch_scatter_min_flat(x, y):
     flat_x = x.reshape(-1)
     flat_y = y.reshape(-1)
-    idx = _jax_scatter_index_flat(x, y)
-    return flat_x.at[idx].min(flat_y).reshape(x.shape)
+    idx = _torch_scatter_unique_index_flat(x)
+    return torch.ops.aten.scatter_reduce.two(
+        flat_x, 0, idx, flat_y, "amin", include_self=True
+    ).reshape(x.shape)
 
 def _jax_slice_last_half(x):
     k = max(1, x.shape[-1] // 2)
@@ -634,49 +714,37 @@ op_spec(
     "scatter",
     "indexing",
     OpArity.BINARY,
-    torch_fn=None,
+    torch_fn=_torch_scatter_set_flat,
     shape_type="reduction",
     # supported_dtypes=("float32",),
-    notes=(
-        "TODO: jax.lax.scatter set semantics (conflicting indices update order) "
-        "is not strict 1:1 with current PyTorch path."
-    ),
+    notes="unique_indices scenario: flat scatter set with 1:1 ATen mapping",
 )(_jax_scatter_set_flat)
 op_spec(
     "scatter_add",
     "indexing",
     OpArity.BINARY,
-    torch_fn=None,
+    torch_fn=_torch_scatter_add_flat,
     shape_type="reduction",
     # supported_dtypes=("float32",),
-    notes=(
-        "TODO: jax.lax.scatter_add semantics with conflicting indices is not "
-        "strict 1:1 with current PyTorch path."
-    ),
+    notes="unique_indices scenario: flat scatter_add with 1:1 ATen mapping",
 )(_jax_scatter_add_flat)
 op_spec(
     "scatter_max",
     "indexing",
     OpArity.BINARY,
-    torch_fn=None,
+    torch_fn=_torch_scatter_max_flat,
     shape_type="reduction",
     # supported_dtypes=("float32",),
-    notes=(
-        "TODO: jax.lax.scatter_max semantics with conflicting indices is not "
-        "strict 1:1 with current PyTorch path."
-    ),
+    notes="unique_indices scenario: flat scatter_max with 1:1 ATen mapping",
 )(_jax_scatter_max_flat)
 op_spec(
     "scatter_min",
     "indexing",
     OpArity.BINARY,
-    torch_fn=None,
+    torch_fn=_torch_scatter_min_flat,
     shape_type="reduction",
     # supported_dtypes=("float32",),
-    notes=(
-        "TODO: jax.lax.scatter_min semantics with conflicting indices is not "
-        "strict 1:1 with current PyTorch path."
-    ),
+    notes="unique_indices scenario: flat scatter_min with 1:1 ATen mapping",
 )(_jax_scatter_min_flat)
 op_spec(
     "slice",
@@ -779,16 +847,27 @@ def _torch_sort_key_val_keys(x):
     return torch.sort(x, dim=-1, stable=True).values
 
 def _jax_scatter_mul_flat(x, y):
-    flat_x = x.reshape(-1)
-    flat_y = y.reshape(-1)
-    idx = _jax_scatter_index_flat(x, y)
-    return flat_x.at[idx].multiply(flat_y).reshape(x.shape)
+    return lax.reshape(
+        lax.scatter_mul(
+            lax.reshape(x, (x.size,)),
+            _jax_scatter_unique_index_flat(x),
+            lax.reshape(y, (x.size,)),
+            _SCATTER_DNUMS_FLAT,
+            indices_are_sorted=True,
+            unique_indices=True,
+            mode=lax.GatherScatterMode.PROMISE_IN_BOUNDS,
+        ),
+        x.shape,
+    )
 
-def _jax_scatter_sub_flat(x, y):
+
+def _torch_scatter_mul_flat(x, y):
     flat_x = x.reshape(-1)
     flat_y = y.reshape(-1)
-    idx = _jax_scatter_index_flat(x, y)
-    return flat_x.at[idx].add(-flat_y).reshape(x.shape)
+    idx = _torch_scatter_unique_index_flat(x)
+    return torch.ops.aten.scatter_reduce.two(
+        flat_x, 0, idx, flat_y, "prod", include_self=True
+    ).reshape(x.shape)
 
 op_spec(
     "approx_max_k",
@@ -963,26 +1042,11 @@ op_spec(
     "scatter_mul",
     "indexing",
     OpArity.BINARY,
-    torch_fn=None,
+    torch_fn=_torch_scatter_mul_flat,
     shape_type="reduction",
     # supported_dtypes=("float32",),
-    notes=(
-        "TODO: jax.lax.scatter_mul semantics with conflicting indices is not "
-        "strict 1:1 with current PyTorch path."
-    ),
+    notes="unique_indices scenario: flat scatter_mul with 1:1 ATen mapping",
 )(_jax_scatter_mul_flat)
-op_spec(
-    "scatter_sub",
-    "indexing",
-    OpArity.BINARY,
-    torch_fn=None,
-    shape_type="reduction",
-    # supported_dtypes=("float32",),
-    notes=(
-        "TODO: jax.lax.scatter_sub semantics with conflicting indices is not "
-        "strict 1:1 with current PyTorch path."
-    ),
-)(_jax_scatter_sub_flat)
 
 op_spec(
     "reduce_and",
@@ -1354,7 +1418,9 @@ def _jax_conv(inp, ker, strides, padding):
         dn = lax.conv_dimension_numbers(inp.shape, ker.shape, ('NCH', 'OIH', 'NCH'))
     else:
         dn = lax.conv_dimension_numbers(inp.shape, ker.shape, ('NCHW', 'OIHW', 'NCHW'))
-    return lax.conv_general_dilated(inp, ker, strides, padding, dimension_numbers=dn)
+    return lax.conv_general_dilated(
+        inp, ker, strides, padding, dimension_numbers=dn, precision=lax.Precision.HIGHEST
+    )
 
 op_spec(
     "conv_general_dilated",

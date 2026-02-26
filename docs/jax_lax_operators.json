@@ -142,7 +142,6 @@
       "scatter_max",
       "scatter_min",
       "scatter_mul",
-      "scatter_sub",
       "shift_left",
       "shift_right_arithmetic",
       "shift_right_logical",

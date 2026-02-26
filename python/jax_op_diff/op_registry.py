@@ -342,7 +342,7 @@ def generate_inputs(op: OpSpec, shape, dtype_key: str, seed: int = 42) -> dict:
 
     elif op.arity == OpArity.BINARY:
         raw_x = _constrain(_raw(rng, shape), domain)
-        if op.name in {"scatter", "scatter_add", "scatter_max", "scatter_min", "scatter_mul", "scatter_sub"}:
+        if op.name in {"scatter", "scatter_add", "scatter_max", "scatter_min", "scatter_mul"}:
             flat_size = int(np.prod(shape))
             raw_y = rng.permutation(flat_size).astype(np.float64).reshape(shape)
         else:
@@ -350,6 +350,17 @@ def generate_inputs(op: OpSpec, shape, dtype_key: str, seed: int = 42) -> dict:
         return {"x": _cast(raw_x, dtype_key), "y": _cast(raw_y, dtype_key)}
 
     elif op.arity == OpArity.TERNARY:
+        if op.name == "betainc":
+            # betainc(a, b, x): a > 0, b > 0, x in [0, 1]
+            raw_a = _constrain(_raw(rng, shape), InputDomain.POSITIVE)
+            raw_b = _constrain(_raw(rng, shape), InputDomain.POSITIVE)
+            raw_x = _constrain(_raw(rng, shape), InputDomain.UNIT_CLOSED)
+            return {
+                "lo": _cast(raw_a, dtype_key),
+                "x": _cast(raw_b, dtype_key),
+                "hi": _cast(raw_x, dtype_key),
+            }
+
         raw_a = _constrain(_raw(rng, shape), domain)
         raw_b = _constrain(_raw(rng, shape), domain)
         raw_c = _constrain(_raw(rng, shape), domain)
