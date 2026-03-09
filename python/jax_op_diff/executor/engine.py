@@ -11,46 +11,8 @@ import torch
 
 from ..core import CaseData, PrecisionResult
 from ..op_registry import OpSpec, OpArity, InputDomain, generate_inputs
-from ..config import TestConfig, DTYPE_MAP, NP_DTYPE_MAP, ATOL_MAP, is_fp8, safe_shape_str
+from ..config import TestConfig, DTYPE_MAP, safe_shape_str
 from .metrics import compute_metrics, compute_all_close
-
-
-# =============================================================================
-# FP8 + CPU pre-check
-# =============================================================================
-
-_FP8_CPU_UNSUPPORTED_NOTE = (
-    "ERROR: FP8 dtype ({dtype}) is not supported on CPU backend ({backend}). "
-    "FP8 computation requires GPU/TPU hardware support."
-)
-
-
-def _is_cpu_backend(config: TestConfig) -> bool:
-    """Check if the effective JAX backend is CPU."""
-    return config.jax_backend == "cpu"
-
-
-def _is_cpu_torch_device(config: TestConfig) -> bool:
-    """Check if the effective PyTorch device is CPU."""
-    return config.torch_device == "cpu"
-
-
-def _should_skip_fp8_on_cpu(dtype_key: str, config: TestConfig) -> str | None:
-    """Return a skip reason string if FP8 dtype should be skipped on CPU, else None."""
-    if not is_fp8(dtype_key):
-        return None
-
-    backends = []
-    if _is_cpu_backend(config):
-        backends.append(f"JAX/{config.jax_backend}->cpu")
-    if _is_cpu_torch_device(config):
-        backends.append(f"PyTorch/{config.torch_device}->cpu")
-
-    if backends:
-        return _FP8_CPU_UNSUPPORTED_NOTE.format(
-            dtype=dtype_key, backend=", ".join(backends)
-        )
-    return None
 
 
 # =============================================================================
@@ -114,11 +76,6 @@ def execute_single_test(op: OpSpec, shape, dtype_key: str,
         )
         defaults.update(kw)
         return PrecisionResult(**defaults), None
-
-    # Check FP8 on CPU: mark as ERROR with explicit message
-    fp8_skip = _should_skip_fp8_on_cpu(dtype_key, config)
-    if fp8_skip is not None:
-        return _skip_result(all_close=False, error_msg=fp8_skip)
 
     # Check torch availability
     if op.torch_fn is None:
@@ -343,12 +300,6 @@ def replay_single_case(case: CaseData, op_map: dict,
 
         op = op_map[op_name]
 
-        # FP8 CPU check
-        fp8_skip = _should_skip_fp8_on_cpu(dtype_key, config)
-        if fp8_skip is not None:
-            return PrecisionResult.error(
-                op_name, category, dtype_key, shape_str, fp8_skip)
-
         stored_output = case.stored_output
         if stored_output.size == 0:
             return PrecisionResult.error(
@@ -395,6 +346,114 @@ def replay_single_case(case: CaseData, op_map: dict,
             warnings.simplefilter("ignore")
             metrics = compute_metrics(stored_metric, fresh_metric, metric_dtype)
             all_close = compute_all_close(stored_metric, fresh_metric, dtype_key)
+
+        return PrecisionResult(
+            op_name=op_name, category=category, dtype=dtype_key,
+            shape=shape_str, all_close=all_close, torch_missing=False,
+            notes=op.notes, **metrics)
+
+    except Exception as e:
+        return PrecisionResult.error(
+            case.case_name, "", "", "",
+            f"ERROR: {type(e).__name__}: {str(e)[:200]}")
+
+
+# =============================================================================
+# JAX Precision: CPU fp32 ground truth vs accelerator
+# =============================================================================
+
+
+def execute_jax_precision(op: OpSpec, shape, target_dtype_key: str,
+                          config: TestConfig, seed: int = 42,
+                          ) -> tuple["PrecisionResult", "np.ndarray | None"]:
+    """Execute JAX precision test: CPU fp32 (ground truth) vs accelerator.
+
+    Returns (PrecisionResult, ground_truth_np_or_None).
+    The second element is the CPU fp32 ground truth for dump reuse.
+    """
+    shape_str = safe_shape_str(shape)
+    try:
+        inputs = generate_inputs(op, shape, "float32", seed)
+        is_complex = op.input_domain == InputDomain.COMPLEX
+
+        # Ground truth: CPU float32
+        cpu_device = jax.devices("cpu")[0]
+        gt_out = _execute_jax(op, inputs, "float32", cpu_device, is_complex)
+        gt_np = np.array(gt_out)
+
+        # Actual: accelerator with target dtype
+        accel_device = jax.devices(config.jax_backend)[0]
+        actual_out = _execute_jax(op, inputs, target_dtype_key, accel_device, is_complex)
+        actual_np = np.array(actual_out)
+
+        # Metrics: ground truth vs actual
+        gt_metric, actual_metric, metric_dtype = _prepare_for_metrics(
+            gt_np, actual_np, target_dtype_key)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            metrics = compute_metrics(gt_metric, actual_metric, metric_dtype)
+            all_close = compute_all_close(gt_metric, actual_metric, target_dtype_key)
+
+        result = PrecisionResult(
+            op_name=op.name, category=op.category, dtype=target_dtype_key,
+            shape=shape_str, all_close=all_close,
+            torch_missing=False, notes=op.notes, **metrics)
+        return result, gt_np
+
+    except Exception as e:
+        return PrecisionResult.error(
+            op.name, op.category, target_dtype_key, shape_str,
+            f"ERROR: {type(e).__name__}: {str(e)[:200]}"), None
+
+
+def replay_jax_precision_case(case: CaseData, op_map: dict,
+                              config: TestConfig) -> PrecisionResult:
+    """Replay a jax-precision dump case.
+
+    stored_output = CPU fp32 ground truth.
+    Re-executes on accelerator with target dtype and compares.
+    """
+    try:
+        op_name = case.op_name
+        category = case.category
+        dtype_key = case.dtype_key
+        shape_str = case.shape_str
+
+        if op_name not in op_map:
+            return PrecisionResult.error(
+                op_name, category, dtype_key, shape_str,
+                f"ERROR: op '{op_name}' not found in registry")
+
+        op = op_map[op_name]
+
+        stored_output = case.stored_output
+        if stored_output.size == 0:
+            return PrecisionResult.error(
+                op_name, category, dtype_key, shape_str,
+                "ERROR: no stored ground truth in dump file")
+
+        inputs = dict(case.inputs)
+
+        if op.arity == OpArity.CONV:
+            conv_shape = ast.literal_eval(shape_str)
+            inputs["strides"] = tuple(conv_shape["strides"])
+            inputs["padding"] = conv_shape["padding"]
+
+        # Execute on accelerator with target dtype
+        is_complex = op.input_domain == InputDomain.COMPLEX
+        device = jax.devices(config.jax_backend)[0]
+        fresh_actual = np.array(
+            _execute_jax(op, inputs, dtype_key, device, is_complex))
+
+        # Metrics: stored ground truth vs fresh actual
+        gt_metric, actual_metric, metric_dtype = _prepare_for_metrics(
+            stored_output, fresh_actual, dtype_key)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            metrics = compute_metrics(gt_metric, actual_metric, metric_dtype)
+            all_close = compute_all_close(gt_metric, actual_metric, dtype_key)
 
         return PrecisionResult(
             op_name=op_name, category=category, dtype=dtype_key,

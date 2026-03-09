@@ -93,3 +93,61 @@ class TestRunReplay:
         # Then: replay
         results = pipeline.run_replay(small_config, filters, small_config.dump_dir)
         assert len(results) > 0
+
+
+class TestRunJaxPrecision:
+    def test_produces_results(self, small_config):
+        filters = RunFilters(categories={"basic"})
+        results = pipeline.run_jax_precision(small_config, filters, dump=False)
+        assert len(results) > 0
+        assert all(isinstance(r, PrecisionResult) for r in results)
+
+    def test_cpu_vs_cpu_float32_all_close(self, small_config):
+        """CPU fp32 ground truth vs CPU fp32 actual should be identical."""
+        filters = RunFilters(categories={"basic"})
+        results = pipeline.run_jax_precision(small_config, filters, dump=False)
+        real = [r for r in results if not r.error_msg]
+        assert len(real) > 0
+        for r in real:
+            assert r.all_close, f"{r.op_name} ({r.dtype}) not all_close"
+            assert r.max_abs_error == 0.0
+
+    def test_dump_creates_file(self, small_config):
+        filters = RunFilters(categories={"basic"})
+        pipeline.run_jax_precision(small_config, filters, dump=True)
+        dump_path = os.path.join(small_config.dump_dir, "dump.h5")
+        assert os.path.exists(dump_path)
+
+    def test_dump_then_replay(self, small_config):
+        filters = RunFilters(categories={"basic"})
+        # First: jax-precision with dump
+        original = pipeline.run_jax_precision(small_config, filters, dump=True)
+        # Then: replay from that dump
+        replayed = pipeline.run_jax_precision_replay(
+            small_config, filters, small_config.dump_dir)
+        assert len(replayed) > 0
+        assert len(replayed) == len([r for r in original if not r.error_msg])
+
+    def test_unsupported_dtype_no_crash(self, small_config):
+        """FP8 on CPU should not crash — either succeeds (auto-upcast) or errors gracefully."""
+        fp8_config = TestConfig(
+            seed=small_config.seed,
+            jax_backend="cpu",
+            torch_device="cpu",
+            dtypes=("float8_e4m3fn",),
+            scalar_shapes=(),
+            vector_shapes=((8,),),
+            matrix_shapes=(),
+            higher_dim_shapes=(),
+            matmul_shapes=(),
+            batch_matmul_shapes=(),
+            conv_shapes=(),
+            linalg_shapes=(),
+            linalg_solve_shapes=(),
+            dump_dir=str(small_config.dump_dir),
+            report_dir=str(small_config.report_dir),
+        )
+        filters = RunFilters(op_names={"add"})
+        results = pipeline.run_jax_precision(fp8_config, filters, dump=False)
+        assert len(results) > 0
+        assert all(isinstance(r, PrecisionResult) for r in results)

@@ -11,7 +11,7 @@ from .core import RunFilters
 def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="jax-op-diff")
     parser.add_argument(
-        "--mode", choices=("compare", "jax-only", "replay"),
+        "--mode", choices=("compare", "jax-only", "replay", "jax-precision"),
         default="compare",
     )
     parser.add_argument(
@@ -44,13 +44,9 @@ def parse_args(argv=None) -> argparse.Namespace:
     if args.mode == "replay" and not args.from_dumps:
         parser.error("--mode replay requires --from-dumps DIR")
     if args.mode in ("compare", "jax-only") and args.from_dumps is not None:
-        parser.error("--from-dumps is only valid when --mode replay")
+        parser.error("--from-dumps is only valid when --mode replay or jax-precision")
     if args.mode == "jax-only" and args.no_dump:
         parser.error("--no-dump is invalid when --mode jax-only")
-
-    # Backwards compat: --from-dumps without --mode implies replay
-    if args.from_dumps is not None and args.mode == "compare":
-        args.mode = "replay"
 
     return args
 

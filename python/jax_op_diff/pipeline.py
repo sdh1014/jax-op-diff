@@ -10,7 +10,8 @@ from typing import List, Optional
 from .core import PrecisionResult, RunFilters
 from .config import TestConfig, get_shapes_for_op
 from .dump_store import DumpStore
-from .executor import execute_single_test, execute_jax_only, replay_single_case
+from .executor import (execute_single_test, execute_jax_only, replay_single_case,
+                       execute_jax_precision, replay_jax_precision_case)
 from .op_registry import get_all_ops
 from .reporter import ReportGenerator
 
@@ -105,6 +106,63 @@ def run_replay(config: TestConfig, filters: RunFilters,
 
     for i, case in enumerate(cases, 1):
         result = replay_single_case(case, op_map, config)
+        results.append(result)
+        if i % 50 == 0 or i == len(cases):
+            print(f"  Progress: {i}/{len(cases)} ({100 * i // len(cases)}%)")
+    return results
+
+
+# ---- jax-precision mode ----
+
+
+def run_jax_precision(config: TestConfig, filters: RunFilters,
+                      dump: bool = True) -> List[PrecisionResult]:
+    """JAX Precision: CPU fp32 (ground truth) vs accelerator. Optionally dumps."""
+    ops = _select_ops(get_all_ops(), filters)
+    dumper = None
+    if dump:
+        dumper = DumpStore(config.dump_dir)
+        dumper.create()
+    results: List[PrecisionResult] = []
+    total = sum(len(get_shapes_for_op(op, config)) * len(config.dtypes) for op in ops)
+    done = 0
+
+    print(f"Running {total} jax-precision cases across {len(ops)} operators...")
+
+    for op in ops:
+        for dtype_key in config.dtypes:
+            for shape in get_shapes_for_op(op, config):
+                result, gt_output = execute_jax_precision(
+                    op, shape, dtype_key, config, config.seed)
+                results.append(result)
+                if dumper and gt_output is not None and not result.error_msg:
+                    try:
+                        dumper.append_case(op, shape, dtype_key, config.seed, gt_output)
+                    except Exception:
+                        pass
+                done += 1
+                if done % 50 == 0 or done == total:
+                    print(f"  Progress: {done}/{total} ({100 * done // total}%)")
+    return results
+
+
+def run_jax_precision_replay(config: TestConfig, filters: RunFilters,
+                             dump_dir: str) -> List[PrecisionResult]:
+    """Replay jax-precision from dump: stored ground truth vs fresh accelerator."""
+    op_map = {op.name: op for op in get_all_ops()}
+    store = DumpStore(dump_dir)
+    results: List[PrecisionResult] = []
+    cases = list(store.iter_cases(filters=filters))
+
+    if not cases:
+        print(f"  No dump cases found in {dump_dir}")
+        return []
+
+    print(f"Found {len(cases)} dump cases in {dump_dir}")
+    print(f"Replaying jax-precision on JAX backend: {config.jax_backend}")
+
+    for i, case in enumerate(cases, 1):
+        result = replay_jax_precision_case(case, op_map, config)
         results.append(result)
         if i % 50 == 0 or i == len(cases):
             print(f"  Progress: {i}/{len(cases)} ({100 * i // len(cases)}%)")
